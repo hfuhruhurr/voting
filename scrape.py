@@ -16,39 +16,67 @@ def get_html(url):
         print(f"Failed.  Status code = {response.status_code}")
 
 
-def scrape_vote_data(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    
-    # Find the vote number and description
-    vote_info = soup.find('div', class_='vote-info')
-    vote_number = vote_info.find('span', class_='number').text.strip()
-    vote_description = vote_info.find('span', class_='description').text.strip()
-    
-    # Find the table with voting records
-    table = soup.find('table', class_='rollcall-votes')
-    if table:
-        rows = table.find_all('tr')
-        data = []
-        for row in rows[1:]:  # Skip header
-            cols = row.find_all('td')
-            if len(cols) >= 3:
-                name = cols[0].text.strip()
-                party_state = cols[1].text.strip()
-                vote = cols[2].text.strip()
-                data.append([name, party_state, vote])
-    
-        # Write to CSV
-        with open('house_voting_data.csv', 'w', newline='', encoding='utf-8') as file:
-            writer = csv.writer(file)
-            writer.writerow(['Name', 'Party-State', 'Vote'])  # Header row
-            writer.writerows(data)
-        print(f"Vote {vote_number} - {vote_description} data has been written to CSV.")
-    
+def get_html_from_file():
+    with open('roll-call-votes.html', 'r') as f:
+        html = f.read()
+        return BeautifulSoup(html, 'html.parser')
+
+def get_sessions_soup(chamber_soup):
+    return chamber_soup.select('ul.plain.list-w-multiple-links > li')    
+
+
+def get_congresses(sessions):
+    congresses = []
+    for session in sessions:
+        congress_number = session.find('span', class_ = 'title').find('strong').text
+        # print(congress_number)
+
+        sessionn_links = session.select('ul > li > a')
+        urls = [link['href'] for link in sessionn_links]
+        # print(urls)
+
+        congresses.append({
+            'congress_number': congress_number,
+            'urls': urls,
+        })
+
+    return congresses
+
+
+def get_session_links(html):
+    chambers_soup = html.find_all('div', class_ = 'column-equal')
+
+    links = []
+    for chamber_soup in chambers_soup:
+        chamber = chamber_soup.h2.text
+        # print(f"Chamber: {chamber}")
+        sessions_soup = get_sessions_soup(chamber_soup)
+        congresses = get_congresses(sessions_soup)
+        # print(congresses)
+        links.append({
+            'chamber': chamber,
+            'congresses': congresses
+        })
+
+    return links
+
+
+def print_links(session_links):
+    for link in session_links:
+        print(f"{link['chamber']}:")
+        for congress in link['congresses']:
+            print(f"    {congress['congress_number']} Congress:")
+            for url in congress['urls']:
+                print(f"        {url}")    
 
 def main():
-    congress_url = "https://www.congress.gov/roll-call-votes"
-    get_html(congress_url)
+    # congress_url = "https://www.congress.gov/roll-call-votes"
+    # html = get_html(congress_url)
+    html = get_html_from_file()
 
+    session_links = get_session_links(html)
+    print_links(session_links)
+    
 
 if __name__ == '__main__':
     print("Let's go!")
